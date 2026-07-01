@@ -1,0 +1,681 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>IDXScan - Trending Stocks & Technical Analysis Dashboard</title>
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <!-- Custom Stylesheet -->
+  <link rel="stylesheet" href="styles.css">
+  <!-- TradingView Lightweight Charts (Production Build) -->
+  <script src="https://unpkg.com/lightweight-charts@4.1.1/dist/lightweight-charts.standalone.production.js"></script>
+  <!-- Lucide Icons (Minified Production Build) -->
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.344.0/dist/umd/lucide.min.js"></script>
+</head>
+<body class="bg-[#0b0f19] text-[#f3f4f6] min-h-screen flex flex-col">
+  <script>
+    window.addEventListener('error', function(e) {
+      const div = document.createElement('div');
+      div.style.cssText = 'position:fixed;bottom:10px;left:10px;background:rgba(220,38,38,0.95);color:white;padding:16px;border-radius:8px;z-index:99999;max-width:600px;font-family:monospace;font-size:12px;white-space:pre-wrap;box-shadow:0 10px 25px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);';
+      div.innerText = 'CRASH: ' + e.message + '\nFile: ' + e.filename + ':' + e.lineno + '\nStack: ' + (e.error ? e.error.stack : 'N/A');
+      document.body.appendChild(div);
+    });
+    window.addEventListener('unhandledrejection', function(e) {
+      const div = document.createElement('div');
+      div.style.cssText = 'position:fixed;bottom:150px;left:10px;background:rgba(217,119,6,0.95);color:white;padding:16px;border-radius:8px;z-index:99999;max-width:600px;font-family:monospace;font-size:12px;white-space:pre-wrap;box-shadow:0 10px 25px rgba(0,0,0,0.5);border:1px solid rgba(255,255,255,0.2);';
+      div.innerText = 'REJECTION: ' + e.reason + '\nStack: ' + (e.reason && e.reason.stack ? e.reason.stack : 'N/A');
+      document.body.appendChild(div);
+    });
+  </script>
+
+  <!-- Header -->
+  <header class="border-b border-white/5 bg-[#111827]/80 backdrop-blur-md sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex items-center justify-between">
+      <div class="flex items-center space-x-3">
+        <div class="h-10 w-10 rounded-xl bg-gradient-to-tr from-blue-600 to-indigo-600 flex items-center justify-center shadow-lg shadow-blue-500/20">
+          <i data-lucide="trending-up" class="w-6 h-6 text-white"></i>
+        </div>
+        <div>
+          <span class="font-extrabold text-lg bg-gradient-to-r from-blue-400 to-indigo-400 bg-clip-text text-transparent">IDXSCAN</span>
+          <div class="text-[10px] text-gray-400">Indonesia Stock Exchange Scanner</div>
+        </div>
+      </div>
+
+      <!-- Quick Actions -->
+      <div class="flex items-center space-x-3">
+        <button id="open-docs-modal-btn" aria-haspopup="dialog" aria-controls="docs-modal" aria-expanded="false" class="flex items-center space-x-2 bg-indigo-600/20 hover:bg-indigo-600/40 border border-indigo-500/30 text-indigo-400 hover:text-indigo-300 text-sm px-4 py-2 rounded-xl transition-all shadow-md font-medium">
+          <i data-lucide="book-open" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Algorithm Docs</span>
+        </button>
+        <button id="open-search-modal-btn" aria-haspopup="dialog" aria-controls="search-modal" aria-expanded="false" class="flex items-center space-x-2 bg-gray-900 hover:bg-gray-800 border border-white/10 text-gray-400 hover:text-white text-sm px-4 py-2 rounded-xl transition-all shadow-md">
+          <i data-lucide="search" class="w-4 h-4"></i>
+          <span class="hidden sm:inline">Search Stocks...</span>
+          <span class="bg-white/10 px-1.5 py-0.5 rounded text-[10px] ml-2 font-medium hidden md:block">Ctrl K</span>
+        </button>
+      </div>
+    </div>
+  </header>
+
+
+  <!-- Error Alerts -->
+  <div id="search-error" class="hidden max-w-7xl mx-auto mt-4 px-4 w-full">
+    <div class="bg-rose-500/15 border border-rose-500/30 text-rose-400 px-4 py-3 rounded-xl text-sm flex items-center space-x-3">
+      <i data-lucide="alert-circle" class="w-5 h-5 flex-shrink-0"></i>
+      <span>Could not load stock data. Please check the ticker symbol.</span>
+    </div>
+  </div>
+
+  <!-- Main Container -->
+  <main class="flex-grow max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-8 py-6 w-full flex flex-col gap-6 xl:gap-8 relative items-start">
+    
+    <!-- Active Ticker Overview Header -->
+    <div class="glass-panel p-6 flex flex-col gap-4 w-full">
+      <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+        <div>
+          <div class="flex items-center space-x-3">
+            <h1 id="detail-ticker-name" class="text-2xl font-extrabold text-white tracking-tight">--.JK</h1>
+            <span id="detail-board-badge" class="px-2 py-0.5 rounded text-[10px] bg-gray-800 border border-white/10 text-gray-400 font-bold uppercase hidden">--</span>
+            <span id="detail-recommendation-badge" class="px-2.5 py-0.5 rounded-full text-xs font-semibold uppercase tracking-wider">--</span>
+            <button id="save-watchlist-btn" aria-label="Add to Watchlist" class="p-1.5 bg-white/5 hover:bg-white/10 rounded-lg border border-white/10 text-gray-400 hover:text-white transition-all ml-1" title="Add to Watchlist">
+              <i data-lucide="bookmark" class="w-3.5 h-3.5"></i>
+            </button>
+          </div>
+          <p id="detail-company-name" class="text-xs text-gray-400 mt-1">Loading corporate details...</p>
+        </div>
+        <div class="text-left md:text-right">
+          <div id="detail-price" class="text-2xl font-extrabold text-white">Rp 0</div>
+          <div id="detail-change" class="text-sm font-semibold text-gray-400 mt-1">--%</div>
+        </div>
+      </div>
+
+      <!-- Yahoo Finance Market Data -->
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-4 pt-4 border-t border-white/5 text-sm">
+        <div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider">52W High</div>
+          <div id="detail-52w-high" class="font-bold text-gray-300">--</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider">52W Low</div>
+          <div id="detail-52w-low" class="font-bold text-gray-300">--</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider">Avg Market Volume</div>
+          <div id="detail-volume" class="font-bold text-gray-300">--</div>
+        </div>
+        <div>
+          <div class="text-[10px] text-gray-500 uppercase tracking-wider">Data Source</div>
+          <a id="detail-yahoo-link" href="#" target="_blank" class="font-bold text-blue-400 hover:text-blue-300 flex items-center space-x-1 transition-colors">
+            <span>Yahoo Finance</span>
+            <i data-lucide="external-link" class="w-3 h-3"></i>
+          </a>
+        </div>
+      </div>
+    </div>
+
+    <!-- Technical Analyst Verdict & Indicators Summary -->
+    <div class="grid grid-cols-1 md:grid-cols-2 gap-6 w-full">
+      
+      <!-- Analyst Report Card -->
+      <div class="glass-panel p-6 flex flex-col justify-between">
+        <div>
+          <div class="flex items-center space-x-2 mb-3">
+            <i data-lucide="shield-check" class="w-5 h-5 text-indigo-400"></i>
+            <span class="font-bold text-sm text-gray-200">Analyst Verdict</span>
+          </div>
+          <p id="analyst-summary-comment" class="text-sm text-gray-400 leading-relaxed mb-6">
+            Analyzing charts and current price ranges. Calculating indicators and oscillators...
+          </p>
+          
+          <!-- Trading Plan -->
+          <div class="bg-gray-900/50 rounded-xl p-4 border border-white/5">
+            <div class="flex items-center space-x-2 mb-3 text-sm font-bold text-gray-200">
+              <i data-lucide="crosshair" class="w-4 h-4 text-emerald-400"></i>
+              <span>Trading Plan</span>
+            </div>
+            <div class="space-y-2 text-xs">
+              <div class="flex justify-between items-center pb-2 border-b border-white/5">
+                <span class="text-gray-400">Entry Range</span>
+                <span id="plan-entry" class="font-bold text-white">--</span>
+              </div>
+              <div class="flex justify-between items-center pb-2 border-b border-white/5">
+                <span class="text-gray-400">Take Profit (TP)</span>
+                <span id="plan-tp" class="font-bold text-emerald-400">--</span>
+              </div>
+              <div class="flex justify-between items-center pb-2 border-b border-white/5">
+                <span class="text-gray-400">Stop Loss (SL)</span>
+                <span id="plan-sl" class="font-bold text-rose-400">--</span>
+              </div>
+              <div class="flex justify-between items-center pt-1">
+                <span class="text-gray-400 text-[10px]">Support: <span id="plan-support" class="font-bold text-gray-300">--</span></span>
+                <span class="text-gray-400 text-[10px]">Resistance: <span id="plan-resistance" class="font-bold text-gray-300">--</span></span>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-6 border-t border-white/5 pt-4 text-[10px] text-gray-500 flex items-center space-x-1.5">
+          <i data-lucide="info" class="w-3.5 h-3.5"></i>
+          <span>Calculations computed dynamically on active daily chart intervals.</span>
+        </div>
+      </div>
+
+      <!-- Indicators Scoreboard -->
+      <div class="glass-panel p-6">
+        <div class="flex items-center space-x-2 mb-4">
+          <i data-lucide="bar-chart-2" class="w-5 h-5 text-indigo-400"></i>
+          <span class="font-bold text-sm text-gray-200">Indicators Details</span>
+        </div>
+        <div class="space-y-3.5">
+          <!-- RSI Row -->
+          <div class="flex items-center justify-between text-xs py-1 border-b border-white/5">
+            <span class="text-gray-400">RSI (14)</span>
+            <div class="flex items-center space-x-3">
+              <span id="indicator-rsi-val" class="font-bold text-white">--</span>
+              <span id="indicator-rsi-signal" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-white">--</span>
+            </div>
+          </div>
+
+          <!-- MACD Row -->
+          <div class="flex items-center justify-between text-xs py-1 border-b border-white/5">
+            <span class="text-gray-400">MACD Convergence</span>
+            <div class="flex items-center space-x-3">
+              <span id="indicator-macd-val" class="font-bold text-white">--</span>
+              <span id="indicator-macd-signal" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-white">--</span>
+            </div>
+          </div>
+
+          <!-- Moving Averages Row -->
+          <div class="flex items-center justify-between text-xs py-1 border-b border-white/5">
+            <span class="text-gray-400">Moving Averages (EMA 50)</span>
+            <div class="flex items-center space-x-3">
+              <span id="indicator-ema-val" class="font-bold text-white">--</span>
+              <span id="indicator-ema-signal" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-white">--</span>
+            </div>
+          </div>
+
+          <!-- Support & Resistance Row -->
+          <div class="flex items-center justify-between text-xs py-1 border-b border-white/5">
+            <span class="text-gray-400">Support / Resistance</span>
+            <div class="flex items-center space-x-3">
+              <span id="indicator-sr-val" class="font-bold text-white">-- / --</span>
+              <span id="indicator-sr-signal" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-white">--</span>
+            </div>
+          </div>
+
+          <!-- Fibonacci Levels Row -->
+          <div class="flex items-center justify-between text-xs py-1 border-b border-white/5">
+            <span class="text-gray-400">Fibonacci Retracement</span>
+            <div class="flex items-center space-x-3">
+              <span id="indicator-fib-val" class="font-bold text-white">--</span>
+              <span id="indicator-fib-signal" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-white">--</span>
+            </div>
+          </div>
+
+          <!-- Volume Analysis Row -->
+          <div class="flex items-center justify-between text-xs py-1 border-b border-white/5">
+            <span class="text-gray-400">Volume Analysis (vs 20D Avg)</span>
+            <div class="flex items-center space-x-3">
+              <span id="indicator-vol-val" class="font-bold text-white">--</span>
+              <span id="indicator-vol-signal" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-white">--</span>
+            </div>
+          </div>
+
+          <!-- Stochastic Row -->
+          <div class="flex items-center justify-between text-xs py-1">
+            <span class="text-gray-400">Stochastic (14,3,3)</span>
+            <div class="flex items-center space-x-3">
+              <span id="indicator-stoch-val" class="font-bold text-white">--</span>
+              <span id="indicator-stoch-signal" class="px-2 py-0.5 rounded text-[10px] font-semibold bg-white/5 text-white">--</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- Live Interactive Multi-Chart Pane -->
+    <div class="glass-panel p-4 flex flex-col w-full">
+      <div class="flex items-center justify-between mb-4">
+        <span class="text-sm font-semibold text-gray-300">Live Indicator Chart</span>
+        
+        <!-- Range Selectors -->
+        <div class="flex space-x-1 bg-gray-900 p-0.5 rounded-lg border border-white/5 text-xs text-gray-400">
+          <button data-range="1mo" class="range-btn px-2 py-1 rounded">1M</button>
+          <button data-range="3mo" class="range-btn px-2 py-1 rounded">3M</button>
+          <button data-range="6mo" class="range-btn px-2 py-1 rounded">6M</button>
+          <button data-range="1y"  class="range-btn px-2 py-1 rounded active-tab">1Y</button>
+          <button data-range="2y"  class="range-btn px-2 py-1 rounded">2Y</button>
+          <button data-range="5y"  class="range-btn px-2 py-1 rounded">5Y</button>
+          <button data-range="max" class="range-btn px-2 py-1 rounded">MAX</button>
+        </div>
+      </div>
+
+      <!-- Charts container -->
+      <div class="space-y-4">
+        <!-- Main Candlestick Panel -->
+        <div id="price-chart-container" class="chart-container rounded-lg overflow-hidden border border-white/5 w-full"></div>
+        
+        <!-- RSI Subpanel -->
+        <div>
+          <div class="text-[10px] text-amber-500 font-semibold mb-1 uppercase tracking-wider">RSI (14) Indicator</div>
+          <div id="rsi-chart-container" class="chart-container rounded-lg overflow-hidden border border-white/5 w-full"></div>
+        </div>
+
+        <!-- MACD Subpanel -->
+        <div>
+          <div class="text-[10px] text-blue-500 font-semibold mb-1 uppercase tracking-wider">MACD (12, 26, 9) Momentum</div>
+          <div id="macd-chart-container" class="chart-container rounded-lg overflow-hidden border border-white/5 w-full"></div>
+        </div>
+        
+        <!-- Stochastic Subpanel -->
+        <div>
+          <div class="text-[10px] text-fuchsia-500 font-semibold mb-1 uppercase tracking-wider">Stochastic (14, 3, 3) Oscillator</div>
+          <div id="stoch-chart-container" class="chart-container rounded-lg overflow-hidden border border-white/5 w-full"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Market Movers Ribbon -->
+    <div class="flex items-center space-x-3 overflow-x-auto custom-scrollbar mb-2 mt-4 pt-4 border-t border-white/5">
+      <div class="flex items-center space-x-1.5 text-gray-500 flex-shrink-0 mr-2">
+        <i data-lucide="activity" class="w-4 h-4"></i>
+        <span class="text-xs font-bold uppercase tracking-wider">Live Scanners</span>
+      </div>
+      
+      <button data-list="gainers" class="market-mover-btn flex-shrink-0 flex items-center space-x-1.5 bg-emerald-500/10 hover:bg-emerald-500/20 border border-emerald-500/20 text-emerald-400 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+        <i data-lucide="trending-up" class="w-3.5 h-3.5"></i>
+        <span>Top Gainers</span>
+      </button>
+      
+      <button data-list="losers" class="market-mover-btn flex-shrink-0 flex items-center space-x-1.5 bg-rose-500/10 hover:bg-rose-500/20 border border-rose-500/20 text-rose-400 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+        <i data-lucide="trending-down" class="w-3.5 h-3.5"></i>
+        <span>Top Losers</span>
+      </button>
+      
+      <button data-list="active" class="market-mover-btn flex-shrink-0 flex items-center space-x-1.5 bg-blue-500/10 hover:bg-blue-500/20 border border-blue-500/20 text-blue-400 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+        <i data-lucide="zap" class="w-3.5 h-3.5"></i>
+        <span>Most Active</span>
+      </button>
+      
+      <button data-list="dividend" class="market-mover-btn flex-shrink-0 flex items-center space-x-1.5 bg-amber-500/10 hover:bg-amber-500/20 border border-amber-500/20 text-amber-400 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+        <i data-lucide="coins" class="w-3.5 h-3.5"></i>
+        <span>High Dividend</span>
+      </button>
+
+      <button data-list="watchlist" class="market-mover-btn flex-shrink-0 flex items-center space-x-1.5 bg-indigo-500/10 hover:bg-indigo-500/20 border border-indigo-500/20 text-indigo-400 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors">
+        <i data-lucide="bookmark" class="w-3.5 h-3.5"></i>
+        <span>My Watchlist</span>
+      </button>
+    </div>
+
+    <!-- Bottom Section: Trending Scanner List -->
+    <div class="glass-panel flex flex-col h-[500px] overflow-hidden w-full border border-white/10 shadow-2xl mt-4">
+      <div class="p-4 border-b border-white/5 flex items-center justify-between bg-gray-900/40">
+        <div class="flex items-center space-x-2">
+          <i data-lucide="flame" class="w-5 h-5 text-amber-500"></i>
+          <span id="trending-table-title" class="font-bold text-base">IDX Trending Movers</span>
+        </div>
+        <div id="scanner-loading-indicator" class="hidden">
+          <div class="animate-spin rounded-full h-4 w-4 border-2 border-t-transparent border-indigo-400"></div>
+        </div>
+      </div>
+      
+      <!-- Table Container -->
+      <div class="flex-grow overflow-y-auto">
+        <table class="w-full text-left border-collapse">
+          <thead>
+            <tr class="text-[10px] uppercase text-gray-400 border-b border-white/5 bg-gray-900/50 sticky top-0 z-10">
+              <th scope="col" class="px-4 py-3 font-semibold">Rank</th>
+              <th scope="col" class="px-4 py-3 font-semibold">Ticker</th>
+              <th scope="col" class="px-4 py-3 font-semibold text-right">Price</th>
+              <th scope="col" class="px-4 py-3 font-semibold text-right">1D Chg</th>
+              <th scope="col" class="px-4 py-3 font-semibold text-right">Vol Ratio</th>
+              <th scope="col" class="px-4 py-3 font-semibold text-right">Signal</th>
+            </tr>
+          </thead>
+          <tbody id="trending-table-body">
+            <!-- Dynamic items will load here -->
+            <tr>
+              <td colspan="6" class="px-4 py-8 text-center text-gray-500 text-sm">
+                <div class="flex flex-col items-center justify-center space-y-3">
+                  <div class="animate-spin rounded-full h-8 w-8 border-2 border-t-transparent border-gray-600"></div>
+                  <span>Analyzing market data...</span>
+                </div>
+              </td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+
+
+    </div>
+  </main>
+
+  <footer class="mt-auto border-t border-white/5 bg-[#111827]/40 py-6 text-center text-xs text-gray-500">
+    <div class="max-w-7xl mx-auto px-4">
+      <p>&copy; 2026 IDXScan | by fasya_dev. Interactive indicators computed live via Yahoo Finance quotes API.</p>
+    </div>
+  </footer>
+
+  <!-- Application Logic -->
+  <script src="idx_tickers.js"></script>
+  <script src="app.js"></script>
+  <script>
+    lucide.createIcons();
+  </script>
+
+  <!-- Full Page Loading Overlay -->
+  <div id="page-loading-overlay" class="hidden fixed inset-0 z-[60] flex items-center justify-center">
+    <div class="absolute inset-0 bg-black/80 backdrop-blur-sm"></div>
+    <div class="relative bg-gray-900 border border-white/10 rounded-2xl p-8 flex flex-col items-center shadow-2xl">
+      <div class="animate-spin rounded-full h-12 w-12 border-4 border-gray-700 border-t-blue-500 mb-4"></div>
+      <h3 class="text-white font-bold text-lg">Fetching Market Data</h3>
+      <p class="text-gray-400 text-sm mt-1">Please wait a moment...</p>
+    </div>
+  </div>
+
+  <!-- Search Command Palette Modal -->
+  <div id="search-modal" role="dialog" aria-modal="true" aria-label="Stock search command palette" class="fixed inset-0 z-[100] hidden flex items-start justify-center pt-[10vh] px-4">
+    <!-- Backdrop -->
+    <div id="search-modal-backdrop" class="absolute inset-0 bg-black/60 backdrop-blur-sm transition-opacity"></div>
+    
+    <!-- Modal Content -->
+    <div class="relative w-full max-w-2xl bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col transform transition-all shadow-blue-900/20">
+      
+      <!-- Input Header -->
+      <div class="relative flex items-center px-4 py-4 border-b border-white/10 bg-gray-800/50">
+        <i data-lucide="search" class="h-6 w-6 text-blue-400 absolute left-6"></i>
+        <input id="modal-search-input" type="text" placeholder="Search for stocks or tickers..." autocomplete="off"
+               class="w-full bg-transparent border-none text-xl text-white placeholder-gray-500 pl-12 pr-4 focus:outline-none focus:ring-0">
+        <div id="modal-search-spinner" class="hidden absolute right-6">
+          <div class="animate-spin rounded-full h-5 w-5 border-2 border-t-transparent border-blue-500"></div>
+        </div>
+        <div class="absolute right-4 px-2 py-1 bg-white/5 border border-white/10 rounded text-[10px] font-bold text-gray-400 hidden sm:block">ESC</div>
+      </div>
+
+      <!-- Results Area -->
+      <div class="max-h-[60vh] overflow-y-auto">
+        <ul id="modal-search-results" class="py-2 text-sm text-gray-300">
+          <!-- Results populated dynamically -->
+        </ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- Documentation Modal -->
+  <div id="docs-modal" role="dialog" aria-modal="true" aria-labelledby="docs-modal-title" class="fixed inset-0 z-[110] hidden flex items-start justify-center pt-[5vh] px-4 pb-4">
+    <!-- Backdrop -->
+    <div id="docs-modal-backdrop" class="absolute inset-0 bg-black/80 backdrop-blur-sm transition-opacity"></div>
+    
+    <!-- Modal Content -->
+    <div class="relative w-full max-w-4xl bg-[#0f172a] border border-white/10 rounded-2xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh]">
+      
+      <!-- Header -->
+      <div class="flex items-center justify-between px-6 py-4 border-b border-white/10 bg-gray-800/50 rounded-t-2xl">
+        <div class="flex items-center space-x-3">
+          <div class="p-2 bg-indigo-500/20 rounded-lg">
+            <i data-lucide="book-open" class="w-5 h-5 text-indigo-400"></i>
+          </div>
+          <h2 id="docs-modal-title" class="text-lg font-bold text-white">Algorithm & Trading Engine Docs</h2>
+        </div>
+        <button id="close-docs-modal-btn" aria-label="Close Documentation Modal" title="Close" class="p-2 hover:bg-white/10 rounded-lg text-gray-400 hover:text-white transition-colors">
+          <i data-lucide="x" class="w-5 h-5"></i>
+        </button>
+      </div>
+
+      <!-- Tab Navigation -->
+      <div class="flex items-center space-x-1 px-6 pt-2 border-b border-white/10 bg-[#0f172a]">
+        <button class="docs-tab-btn active px-4 py-3 text-sm font-semibold text-indigo-400 border-b-2 border-indigo-500 transition-colors" data-target="tab-strategy">The Strategy</button>
+        <button class="docs-tab-btn px-4 py-3 text-sm font-semibold text-gray-500 hover:text-gray-300 border-b-2 border-transparent transition-colors" data-target="tab-indicators">Indicators Guide</button>
+        <button class="docs-tab-btn px-4 py-3 text-sm font-semibold text-gray-500 hover:text-gray-300 border-b-2 border-transparent transition-colors" data-target="tab-charts">Chart Guide</button>
+      </div>
+
+      <!-- Scrollable Body -->
+      <div class="p-6 overflow-y-auto custom-scrollbar text-sm text-gray-300 space-y-8 h-[65vh]">
+        
+        <!-- Tab 1: The Strategy -->
+        <div id="tab-strategy" class="docs-tab-content space-y-8">
+          <section>
+            <h3 class="text-lg font-bold text-white border-b border-white/10 pb-2 mb-4">1. The 6 Strict Recommendation Tiers</h3>
+            <div class="space-y-4">
+              
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <div class="flex items-center space-x-2 mb-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">STRONG BUY</span>
+                  <span class="font-semibold text-white">Perfect Alignment Breakout</span>
+                </div>
+                <p class="text-gray-400 mb-2">The highest conviction setup. Issued only when momentum, volume, and trend all confirm a powerful upward move.</p>
+                <ul class="list-disc list-inside space-y-1 text-xs text-gray-500 font-medium">
+                  <li><span class="text-gray-300">Trend:</span> Price is in an established Uptrend (Above EMA 50 & 200)</li>
+                  <li><span class="text-gray-300">MACD:</span> Bullish Crossover</li>
+                  <li><span class="text-gray-300">Volume:</span> Surging (Ratio > 1.2x average)</li>
+                  <li><span class="text-gray-300">Oscillators:</span> RSI is healthy (40-65) and Stochastics are bullish</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <div class="flex items-center space-x-2 mb-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">ACCUMULATE</span>
+                  <span class="font-semibold text-white">Structural Bounce</span>
+                </div>
+                <p class="text-gray-400 mb-2">Early signs of reversal. Highly attractive risk-to-reward ratio before the wider market notices the trend.</p>
+                <ul class="list-disc list-inside space-y-1 text-xs text-gray-500 font-medium">
+                  <li><span class="text-gray-300">Structure:</span> Price is exactly at Fractal Support or a Fibonacci Golden Ratio (61.8% / 38.2%)</li>
+                  <li><span class="text-gray-300">Oscillators:</span> Oversold (RSI &lt; 30) or Stochastic Bullish Cross</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <div class="flex items-center space-x-2 mb-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">HOLD</span>
+                  <span class="font-semibold text-white">Trend Continuation</span>
+                </div>
+                <p class="text-gray-400 mb-2">The stock is trending up, but it is too late (or too hot) to enter new money safely.</p>
+                <ul class="list-disc list-inside space-y-1 text-xs text-gray-500 font-medium">
+                  <li><span class="text-gray-300">Trend:</span> Moving averages confirm uptrend</li>
+                  <li><span class="text-gray-300">Caution:</span> RSI is overbought (>70) or MACD momentum is slowing down</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <div class="flex items-center space-x-2 mb-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">TAKE PROFIT</span>
+                  <span class="font-semibold text-white">Over-Extended at Resistance</span>
+                </div>
+                <p class="text-gray-400 mb-2">The math indicates a pullback is imminent. Lock in gains.</p>
+                <ul class="list-disc list-inside space-y-1 text-xs text-gray-500 font-medium">
+                  <li><span class="text-gray-300">Structure:</span> Hit Fractal Resistance or 0% Fib level</li>
+                  <li><span class="text-gray-300">Oscillators:</span> Severely overbought (RSI > 70 + Bearish Stochastic Cross)</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <div class="flex items-center space-x-2 mb-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-500/20 text-rose-400 border border-rose-500/30">STRONG SELL</span>
+                  <span class="font-semibold text-white">Bearish Distribution</span>
+                </div>
+                <p class="text-gray-400 mb-2">The structure has broken completely. Heavy institutional selling.</p>
+                <ul class="list-disc list-inside space-y-1 text-xs text-gray-500 font-medium">
+                  <li><span class="text-gray-300">Trend:</span> Total Breakdown (Below EMA 50 & 200)</li>
+                  <li><span class="text-gray-300">MACD & Volume:</span> Bearish Cross on High Volume</li>
+                </ul>
+              </div>
+
+              <div class="bg-gray-800/50 border border-gray-600/30 p-4 rounded-xl">
+                <div class="flex items-center space-x-2 mb-2">
+                  <span class="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-gray-600/30 text-gray-400 border border-gray-500/30">WAIT AND SEE</span>
+                  <span class="font-semibold text-white">Capital Preservation Mode</span>
+                </div>
+                <p class="text-gray-400 mb-2">The ultimate safety fallback. The market is choppy, sideways, or giving highly conflicting signals.</p>
+                <ul class="list-disc list-inside space-y-1 text-xs text-gray-500 font-medium">
+                  <li><span class="text-gray-300">Action:</span> No Trades. Entry, TP, and SL will output as `--`. Stay in cash until clear direction forms.</li>
+                </ul>
+              </div>
+
+            </div>
+          </section>
+
+          <section>
+            <h3 class="text-lg font-bold text-white border-b border-white/10 pb-2 mb-4">2. The Mathematics</h3>
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="bg-white/5 p-4 rounded-xl">
+                <h4 class="font-bold text-indigo-400 mb-1">Dynamic ATR Stop Losses</h4>
+                <p class="text-xs text-gray-400">Stop losses are not static percentages. The engine calculates a 14-period Average True Range (ATR). If a stock is highly volatile, your stop loss is mathematically widened to prevent getting prematurely "stop-hunted".</p>
+              </div>
+              <div class="bg-white/5 p-4 rounded-xl">
+                <h4 class="font-bold text-indigo-400 mb-1">Fractal Support/Resistance</h4>
+                <p class="text-xs text-gray-400">Instead of just pulling the lowest price of the month, the engine scans a 60-day window to identify literal "Swing Highs" and "Swing Lows" (price action pivots) to plot structural boundaries.</p>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Tab 2: Indicators Guide -->
+        <div id="tab-indicators" class="docs-tab-content space-y-8 hidden">
+          <section>
+            <h3 class="text-lg font-bold text-white border-b border-white/10 pb-2 mb-4">How to Read the Indicators</h3>
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <h4 class="font-bold text-blue-400 flex items-center space-x-2"><i data-lucide="activity" class="w-4 h-4"></i><span>RSI (Relative Strength Index)</span></h4>
+                <p class="text-xs text-gray-400 mt-2 mb-3">Measures the speed and change of price movements on a scale of 0 to 100.</p>
+                <ul class="list-disc list-inside text-xs text-gray-300 space-y-1">
+                  <li><strong class="text-rose-400">Above 70 (Overbought):</strong> The stock has rallied too fast and is due for a pullback. Avoid buying here.</li>
+                  <li><strong class="text-emerald-400">Below 30 (Oversold):</strong> The stock has dropped too fast and is due for a bounce. Good area to Accumulate.</li>
+                  <li><strong class="text-white">Between 40-65:</strong> Healthy momentum for trend continuation.</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <h4 class="font-bold text-purple-400 flex items-center space-x-2"><i data-lucide="bar-chart-2" class="w-4 h-4"></i><span>MACD (Moving Average Convergence)</span></h4>
+                <p class="text-xs text-gray-400 mt-2 mb-3">A trend-following momentum indicator that shows the relationship between two moving averages.</p>
+                <ul class="list-disc list-inside text-xs text-gray-300 space-y-1">
+                  <li><strong class="text-emerald-400">Bullish Cross:</strong> The fast line crosses above the slow line. A strong buy signal.</li>
+                  <li><strong class="text-rose-400">Bearish Cross:</strong> The fast line crosses below the slow line. A strong sell signal.</li>
+                  <li><strong class="text-white">Histogram:</strong> Shows the distance between the lines. Growing bars mean gaining momentum.</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <h4 class="font-bold text-orange-400 flex items-center space-x-2"><i data-lucide="zap" class="w-4 h-4"></i><span>Stochastic Oscillator</span></h4>
+                <p class="text-xs text-gray-400 mt-2 mb-3">A momentum indicator comparing a particular closing price to a range of its prices over a certain period. Much faster than RSI.</p>
+                <ul class="list-disc list-inside text-xs text-gray-300 space-y-1">
+                  <li><strong class="text-rose-400">Above 80:</strong> Overbought territory. Be cautious of sudden reversals.</li>
+                  <li><strong class="text-emerald-400">Below 20:</strong> Oversold territory. Look for bullish crosses here for high-probability bounces.</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <h4 class="font-bold text-cyan-400 flex items-center space-x-2"><i data-lucide="trending-up" class="w-4 h-4"></i><span>Moving Averages (EMA / SMA)</span></h4>
+                <p class="text-xs text-gray-400 mt-2 mb-3">Smooths out price data to create a single flowing line, making it easier to identify the direction of the trend.</p>
+                <ul class="list-disc list-inside text-xs text-gray-300 space-y-1">
+                  <li><strong class="text-white">EMA 20:</strong> Short-term trend. Prices tend to hug this line in a strong rally.</li>
+                  <li><strong class="text-white">EMA 50:</strong> Medium-term trend. An excellent dynamic support level.</li>
+                  <li><strong class="text-white">EMA 200:</strong> The Macro Trend. If price is below this, the stock is in a bear market.</li>
+                </ul>
+              </div>
+              
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <h4 class="font-bold text-yellow-400 flex items-center space-x-2"><i data-lucide="bar-chart" class="w-4 h-4"></i><span>Volume Analysis</span></h4>
+                <p class="text-xs text-gray-400 mt-2 mb-3">The number of shares traded in a day. It is the footprint of institutional investors.</p>
+                <ul class="list-disc list-inside text-xs text-gray-300 space-y-1">
+                  <li><strong class="text-emerald-400">High Volume Breakouts:</strong> If a stock goes up on huge volume, institutions are buying. Very bullish.</li>
+                  <li><strong class="text-rose-400">High Volume Dumps:</strong> If a stock drops on huge volume, institutions are escaping. Very bearish.</li>
+                  <li><strong class="text-white">Low Volume:</strong> Retail chop. Never trust a breakout on low volume.</li>
+                </ul>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-4 rounded-xl">
+                <h4 class="font-bold text-pink-400 flex items-center space-x-2"><i data-lucide="layers" class="w-4 h-4"></i><span>Fibonacci Retracement</span></h4>
+                <p class="text-xs text-gray-400 mt-2 mb-3">Horizontal lines indicating where support and resistance are likely to occur based on the mathematical Golden Ratio.</p>
+                <ul class="list-disc list-inside text-xs text-gray-300 space-y-1">
+                  <li><strong class="text-white">0.618 & 0.382 (The Golden Pocket):</strong> The most common areas for a stock to bounce after a pullback.</li>
+                  <li><strong class="text-white">0.500:</strong> The halfway mark. Also a strong psychological support level.</li>
+                </ul>
+              </div>
+            </div>
+          </section>
+        </div>
+
+        <!-- Tab 3: Chart Guide -->
+        <div id="tab-charts" class="docs-tab-content space-y-8 hidden">
+          <section>
+            <h3 class="text-lg font-bold text-white border-b border-white/10 pb-2 mb-4">How to Read the Charts</h3>
+            
+            <div class="space-y-6">
+              
+              <div class="bg-white/5 border border-white/10 p-5 rounded-xl">
+                <h4 class="font-bold text-xl text-white mb-2">Japanese Candlesticks</h4>
+                <p class="text-sm text-gray-400 mb-4">Unlike a simple line chart, a candlestick tells a complete story of the battle between buyers and sellers over a specific timeframe (e.g., 1 day).</p>
+                
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div class="flex items-center space-x-4 bg-gray-900/50 p-4 rounded-lg">
+                    <div class="w-6 h-16 relative flex justify-center">
+                      <div class="absolute top-0 bottom-0 w-0.5 bg-emerald-500"></div>
+                      <div class="absolute top-1/4 bottom-1/4 w-full bg-emerald-500"></div>
+                    </div>
+                    <div>
+                      <h5 class="font-bold text-emerald-400">Bullish (Green) Candle</h5>
+                      <p class="text-xs text-gray-400 mt-1">The closing price is HIGHER than the opening price. Buyers won the day.</p>
+                      <ul class="text-[10px] text-gray-500 mt-2 space-y-0.5">
+                        <li><strong>Top Wick:</strong> Highest price of the day</li>
+                        <li><strong>Top Body:</strong> Closing price</li>
+                        <li><strong>Bottom Body:</strong> Opening price</li>
+                        <li><strong>Bottom Wick:</strong> Lowest price of the day</li>
+                      </ul>
+                    </div>
+                  </div>
+                  
+                  <div class="flex items-center space-x-4 bg-gray-900/50 p-4 rounded-lg">
+                    <div class="w-6 h-16 relative flex justify-center">
+                      <div class="absolute top-0 bottom-0 w-0.5 bg-rose-500"></div>
+                      <div class="absolute top-1/4 bottom-1/4 w-full bg-rose-500"></div>
+                    </div>
+                    <div>
+                      <h5 class="font-bold text-rose-400">Bearish (Red) Candle</h5>
+                      <p class="text-xs text-gray-400 mt-1">The closing price is LOWER than the opening price. Sellers won the day.</p>
+                      <ul class="text-[10px] text-gray-500 mt-2 space-y-0.5">
+                        <li><strong>Top Wick:</strong> Highest price</li>
+                        <li><strong>Top Body:</strong> Opening price</li>
+                        <li><strong>Bottom Body:</strong> Closing price</li>
+                        <li><strong>Bottom Wick:</strong> Lowest price</li>
+                      </ul>
+                    </div>
+                  </div>
+                </div>
+                
+                <div class="mt-4 p-3 bg-indigo-500/10 border border-indigo-500/20 rounded text-xs text-indigo-300">
+                  <strong>Pro Tip: Long Wicks!</strong> If you see a very long bottom wick, it means sellers pushed the price down, but buyers aggressively bought the dip and pushed it back up. This is a very bullish signal (called a Hammer).
+                </div>
+              </div>
+
+              <div class="bg-white/5 border border-white/10 p-5 rounded-xl">
+                <h4 class="font-bold text-xl text-white mb-2">Support & Resistance Zones</h4>
+                <p class="text-sm text-gray-400 mb-4">The market has a memory. Support and Resistance are horizontal zones where price has historically had trouble breaking through.</p>
+                
+                <div class="space-y-4">
+                  <div class="border-l-4 border-emerald-500 pl-4 py-1">
+                    <h5 class="font-bold text-white text-sm">Support (The Floor)</h5>
+                    <p class="text-xs text-gray-400 mt-1">A price level where a downtrend tends to pause due to a concentration of demand (buying interest). As the price drops toward support, it becomes cheaper and buyers step in, preventing it from falling further.</p>
+                  </div>
+                  
+                  <div class="border-l-4 border-rose-500 pl-4 py-1">
+                    <h5 class="font-bold text-white text-sm">Resistance (The Ceiling)</h5>
+                    <p class="text-xs text-gray-400 mt-1">A price level where an uptrend tends to pause due to a concentration of supply (selling interest). As the price rises toward resistance, sellers lock in profits, pushing the price back down.</p>
+                  </div>
+                </div>
+                
+                <div class="mt-4 p-3 bg-gray-800 border border-gray-700 rounded text-xs text-gray-300">
+                  <strong>The Role Reversal:</strong> When a stock finally breaks through a heavy Resistance ceiling, that old ceiling usually becomes the new Support floor!
+                </div>
+              </div>
+              
+            </div>
+          </section>
+
+      </div>
+    </div>
+  </div>
+
+</body>
+</html>

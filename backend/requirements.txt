@@ -1,0 +1,9 @@
+fastapi
+uvicorn
+yfinance
+pandas
+pandas-ta
+cachetools
+pydantic
+starlette
+requests
