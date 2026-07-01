@@ -118,3 +118,9 @@ Open your web browser and navigate to **`http://127.0.0.1:18080`** to view the d
 - Complete Client-Side HTML-encoding against Cross-Site Scripting (XSS).
 - Zero database storage logic eliminates SQL injection vectors.
 - No public/private API keys are exposed.
+
+---
+
+## 📄 License
+
+This project is licensed under the MIT License - see the `LICENSE` file for details.
