@@ -6,7 +6,8 @@
 
 ## ✨ Features
 
-- **Live Market Movers**: Real-time scanner for **Top Gainers**, **Top Losers**, **Most Active**, and **High Dividend** yields.
+- **Live Market Scanners**: Real-time scanners for **Top Gainers**, **Top Losers**, **Most Active**, and technical recommendations (**Strong Buy**, **Accumulate**, **Hold**, **Wait & See**, **Take Profit**, **Strong Sell**).
+- **100% Dynamic Live Data**: No hardcoded/predefined fallback lists or company name maps. Tickers are synchronized directly from the Indonesia Stock Exchange (IDX) listings database and company names are dynamically resolved.
 - **Dynamic Watchlist Bookmark**: Save tickers to your personal Watchlist (persisted locally).
 - **TradingView Charts**: Embedded interactive stock price charts plotting indicators (EMA, Fibonacci Retracement Levels).
 - **Advanced Technical Indicators**: Computes RSI, MACD, Stochastic Oscillator, Support/Resistance, and ATR bounds.
