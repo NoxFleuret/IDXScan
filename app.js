@@ -1,33 +1,22 @@
-// Constants & Configurations
-const TICKERS = [
-  'BBCA.JK', 'BBRI.JK', 'TLKM.JK', 'GOTO.JK', 'ASII.JK',
-  'BMRI.JK', 'BBNI.JK', 'ADRO.JK', 'UNVR.JK', 'PGAS.JK',
-  'ANTM.JK', 'KLBF.JK', 'CPIN.JK', 'ICBP.JK', 'INDF.JK',
-  'HRUM.JK', 'MEDC.JK', 'ITMG.JK', 'PTBA.JK', 'MDKA.JK'
-];
+// Dynamic Names Map Cache
+const TICKER_NAMES = {};
 
-const TICKER_NAMES = {
-  'BBCA.JK': 'Bank Central Asia Tbk.',
-  'BBRI.JK': 'Bank Rakyat Indonesia (Persero) Tbk.',
-  'TLKM.JK': 'Telkom Indonesia (Persero) Tbk.',
-  'GOTO.JK': 'GoTo Gojek Tokopedia Tbk.',
-  'ASII.JK': 'Astra International Tbk.',
-  'BMRI.JK': 'Bank Mandiri (Persero) Tbk.',
-  'BBNI.JK': 'Bank Negara Indonesia (Persero) Tbk.',
-  'ADRO.JK': 'Adaro Energy Indonesia Tbk.',
-  'UNVR.JK': 'Unilever Indonesia Tbk.',
-  'PGAS.JK': 'Perusahaan Gas Negara Tbk.',
-  'ANTM.JK': 'Aneka Tambang Tbk.',
-  'KLBF.JK': 'Kalbe Farma Tbk.',
-  'CPIN.JK': 'Charoen Pokphand Indonesia Tbk.',
-  'ICBP.JK': 'Indofood CBP Sukses Makmur Tbk.',
-  'INDF.JK': 'Indofood Sukses Makmur Tbk.',
-  'HRUM.JK': 'Harum Energy Tbk.',
-  'MEDC.JK': 'Medco Energi Internasional Tbk.',
-  'ITMG.JK': 'Indo Tambangraya Megah Tbk.',
-  'PTBA.JK': 'Bukit Asam Tbk.',
-  'MDKA.JK': 'Merdeka Copper Gold Tbk.'
-};
+// Helper to look up ticker names dynamically from loaded IDX Securities list
+function getTickerName(ticker) {
+  if (!ticker) return '';
+  const cleanTicker = ticker.toUpperCase().trim();
+  if (TICKER_NAMES[cleanTicker]) return TICKER_NAMES[cleanTicker];
+  
+  const rawCode = cleanTicker.replace('.JK', '');
+  const list = (typeof IDX_TICKERS !== 'undefined' && Array.isArray(IDX_TICKERS)) ? IDX_TICKERS : fullIdxList;
+  const match = list.find(x => x.Code.toUpperCase() === rawCode);
+  
+  if (match && match.Name) {
+    TICKER_NAMES[cleanTicker] = match.Name;
+    return match.Name;
+  }
+  return rawCode + ' Stock';
+}
 
 // API base URL configuration (uses relative paths if served by FastAPI, falls back to 127.0.0.1:18080 if file is opened locally)
 const API_BASE = window.location.protocol === 'file:' ? 'http://127.0.0.1:18080' : '';
@@ -57,8 +46,6 @@ const state = {
     priceLines: []     // Fix 9+10: track all price lines for clean removal
   }
 };
-
-// Removed generateMockData and createRandom per user request.
 
 // Fetch historical data & technical analysis from FastAPI Backend
 async function fetchTickerData(ticker, period) {
@@ -169,7 +156,7 @@ async function loadWatchlistTab() {
         const info = await fetchTickerData(ticker);
         return {
           ticker,
-          name: info.meta?.longName || TICKER_NAMES[ticker] || ticker.replace('.JK', ''),
+          name: (info.meta?.longName && !info.meta.longName.includes('.JK')) ? info.meta.longName : getTickerName(ticker),
           price: info.report.latestPrice,
           pctChange: info.report.pctChange,
           volume: info.report.vol?.latestVol || 0,
@@ -485,7 +472,7 @@ async function scanMarket() {
     // Lightweight movers — just ticker, price, pctChange, volume
     const results = (json.movers || []).map(s => ({
       ticker:         s.ticker,
-      name:           TICKER_NAMES[s.ticker] || s.ticker.replace('.JK', ''),
+      name:           getTickerName(s.ticker),
       price:          s.price,
       pctChange:      s.pctChange,
       volume:         s.volume,
@@ -563,7 +550,7 @@ function renderHeaderDetails(ticker, stock, r) {
     document.getElementById('detail-volume').innerText = stock.meta.regularMarketVolume ? stock.meta.regularMarketVolume.toLocaleString('id-ID') : '--';
     document.getElementById('detail-yahoo-link').href = `https://finance.yahoo.com/quote/${ticker.trim()}/`;
     
-    if (stock.meta.longName) {
+    if (stock.meta.longName && !stock.meta.longName.includes('.JK')) {
       document.getElementById('detail-company-name').innerText = stock.meta.longName;
     }
   } else {
@@ -701,7 +688,7 @@ async function selectTicker(ticker) {
       state.stocksData[ticker] = {
         ...(stock || {}),
         ticker:         stockInfo.ticker,
-        name:           stockInfo.meta?.longName || TICKER_NAMES[ticker] || ticker.replace('.JK', ''),
+        name:           (stockInfo.meta?.longName && !stockInfo.meta.longName.includes('.JK')) ? stockInfo.meta.longName : getTickerName(ticker),
         price:          stockInfo.report.latestPrice,
         pctChange:      stockInfo.report.pctChange,
         volumeRatio:    stockInfo.report.vol?.ratio ?? 1,
@@ -837,15 +824,10 @@ async function searchTicker(searchVal) {
     const indicators = stockInfo.indicators;
     const report = stockInfo.report;
 
-    // Make sure name exists
-    if (!TICKER_NAMES[ticker]) {
-      TICKER_NAMES[ticker] = ticker.replace('.JK', '') + ' Stock';
-    }
-
     // Insert into state.stocksData and activeTicker
     state.stocksData[ticker] = {
       ticker,
-      name: TICKER_NAMES[ticker],
+      name: getTickerName(ticker),
       price: report.latestPrice,
       pctChange: report.pctChange,
       volumeRatio: 1.2, // Default estimated ratio for searched item
@@ -1319,6 +1301,10 @@ document.addEventListener('DOMContentLoaded', () => {
       const type = e.currentTarget.getAttribute('data-list');
       const labelText = e.currentTarget.innerText.trim();
       
+      // Update visual active state ring highlights
+      moverBtns.forEach(b => b.classList.remove('ring-2', 'ring-white/25'));
+      e.currentTarget.classList.add('ring-2', 'ring-white/25');
+
       const tableTitle = document.getElementById('trending-table-title');
       if (tableTitle) {
         tableTitle.innerText = `Market Movers: ${labelText}`;
@@ -1359,7 +1345,7 @@ document.addEventListener('DOMContentLoaded', () => {
         // Map lightweight movers format
         const results = (json.movers || []).map(s => ({
           ticker:         s.ticker,
-          name:           TICKER_NAMES[s.ticker] || s.ticker.replace('.JK', ''),
+          name:           getTickerName(s.ticker),
           price:          s.price,
           pctChange:      s.pctChange,
           volume:         s.volume,
