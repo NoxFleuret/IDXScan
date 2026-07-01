@@ -41,7 +41,7 @@ If you are setting up the project from scratch, follow these commands in your te
 
 ```bash
 # 1. Clone or navigate to the project directory
-cd idx-trending-stocks
+cd IDXScan
 
 # 2. Create the Python virtual environment
 python -m venv backend/venv
