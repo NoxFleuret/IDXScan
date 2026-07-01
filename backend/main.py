@@ -1,4 +1,4 @@
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, JSONResponse
@@ -74,28 +74,16 @@ async def serve_index():
 async def serve_index_html():
     return FileResponse(os.path.join(FRONTEND_DIR, "index.html"))
 
+@app.get("/favicon.ico", include_in_schema=False)
+async def serve_favicon():
+    # Return 204 No Content to silence browser log warnings
+    return Response(status_code=204)
+
 # ─────────────────────────────────────────────
 # IDX Ticker Pool
 # ─────────────────────────────────────────────
-FALLBACK_TICKERS = [
-    "GOTO.JK", "BBRI.JK", "BBCA.JK", "BMRI.JK", "BREN.JK", "AMMN.JK",
-    "TLKM.JK", "ASII.JK", "BBNI.JK", "BRPT.JK", "BUMI.JK", "PGEO.JK",
-    "MEDC.JK", "ITMG.JK", "PTBA.JK", "ADRO.JK", "HEXA.JK", "UNTR.JK",
-    "MPMX.JK", "INDF.JK", "KLBF.JK", "ANTM.JK", "MDKA.JK", "ICBP.JK",
-    "PGAS.JK", "UNVR.JK", "HRUM.JK", "CPIN.JK", "AALI.JK", "AKRA.JK",
-    "SMGR.JK", "MYOR.JK", "JPFA.JK", "SCMA.JK", "EXCL.JK", "ISAT.JK",
-    "HMSP.JK", "GGRM.JK", "BSDE.JK", "CTRA.JK", "PWON.JK", "BJBR.JK",
-    "BJTM.JK", "MBAP.JK", "BSSR.JK", "TOTL.JK", "HEXA.JK", "HRUM.JK",
-]
-
-HIGH_DIVIDEND_POOL = {
-    "ITMG.JK", "PTBA.JK", "ADRO.JK", "HEXA.JK", "BSSR.JK", "UNTR.JK",
-    "MPMX.JK", "BJBR.JK", "BJTM.JK", "MBAP.JK", "TOTL.JK", "ASII.JK",
-    "TLKM.JK", "INDF.JK", "BBRI.JK", "HRUM.JK", "ICBP.JK", "SMGR.JK",
-}
-
 def load_idx_tickers() -> List[str]:
-    """Load the full IDX ticker list from idx_tickers.js, fallback to curated pool."""
+    """Load the full IDX ticker list from idx_tickers.js, raise error if missing."""
     js_path = os.path.join(FRONTEND_DIR, "idx_tickers.js")
     if os.path.exists(js_path):
         try:
@@ -108,9 +96,11 @@ def load_idx_tickers() -> List[str]:
                 print(f"[Startup] Loaded {len(tickers)} tickers from idx_tickers.js")
                 return tickers
         except Exception as e:
-            print(f"[Startup] Failed to parse idx_tickers.js: {e}")
-    print(f"[Startup] Using fallback pool of {len(FALLBACK_TICKERS)} tickers.")
-    return FALLBACK_TICKERS
+            raise RuntimeError(f"[Startup] Failed to parse idx_tickers.js: {e}")
+    raise FileNotFoundError(
+        "[Startup] idx_tickers.js was not found. "
+        "Please run update_tickers.py first to fetch live data from the exchange."
+    )
 
 # ─────────────────────────────────────────────
 # Technical Analysis Engine
@@ -289,26 +279,41 @@ def _create_trading_plan(
     recommendation: str, latestPrice: float, s: float, r: float, atr: float
 ) -> Dict[str, Any]:
     """Calculate entry range, stop loss, and take profit bounds for the trading plan."""
-    tp, sl, entryStr = 0, 0, '--'
-    if recommendation in ('STRONG BUY', 'ACCUMULATE') and s and r and atr:
-        entryStr = f"Rp {math.floor(s):,} - Rp {math.floor(latestPrice):,}"
-        sl = math.floor(s - 1.5 * atr)
-        tp = math.floor(r * 0.99) if r * 0.99 > latestPrice else math.floor(latestPrice + 3 * atr)
-    elif recommendation in ('STRONG SELL', 'TAKE PROFIT') and s and r and atr:
-        entryStr = f"Rp {math.floor(latestPrice):,} - Rp {math.floor(r):,}"
-        sl = math.floor(r + 1.5 * atr)
-        tp = math.floor(s * 1.01) if s * 1.01 < latestPrice else math.floor(latestPrice - 3 * atr)
-    elif recommendation == 'HOLD' and r and atr:
-        entryStr = "No New Entry"
-        sl = math.floor(latestPrice - 1.5 * atr)
-        tp = math.floor(r * 0.99)
+    # Ensure support, resistance, and ATR are valid positive floats, otherwise use defaults
+    s_val = s if (s and s > 0) else latestPrice * 0.95
+    r_val = r if (r and r > 0) else latestPrice * 1.05
+    atr_val = atr if (atr and atr > 0) else latestPrice * 0.04
+
+    tp, sl = 0, 0
+    entryStr = '--'
+
+    if recommendation in ('STRONG BUY', 'ACCUMULATE'):
+        entryStr = f"Rp {math.floor(s_val):,} - Rp {math.floor(latestPrice):,}"
+        sl = math.floor(s_val - 1.5 * atr_val)
+        tp = math.floor(r_val * 0.99) if r_val * 0.99 > latestPrice else math.floor(latestPrice + 3 * atr_val)
+    elif recommendation in ('STRONG SELL', 'TAKE PROFIT'):
+        entryStr = f"Rp {math.floor(latestPrice):,} - Rp {math.floor(r_val):,}"
+        sl = math.floor(r_val + 1.5 * atr_val)
+        tp = math.floor(s_val * 1.01) if s_val * 1.01 < latestPrice else math.floor(latestPrice - 3 * atr_val)
+    elif recommendation == 'HOLD':
+        entryStr = "Hold Position"
+        sl = math.floor(latestPrice - 1.5 * atr_val)
+        tp = math.floor(r_val * 0.99) if r_val * 0.99 > latestPrice else math.floor(latestPrice + 3 * atr_val)
+    elif recommendation == 'WAIT AND SEE':
+        entryStr = "Wait for Setup"
+
+    # Fallback to prevent negative or zero SL / TP values
+    if sl <= 0:
+        sl = math.floor(latestPrice * 0.90)
+    if tp <= 0:
+        tp = math.floor(latestPrice * 1.10)
 
     return {
         "entry":      entryStr,
         "sl":         f"Rp {sl:,}" if sl > 0 else "--",
         "tp":         f"Rp {tp:,}" if tp > 0 else "--",
-        "support":    f"Rp {math.floor(s):,}" if s else "--",
-        "resistance": f"Rp {math.floor(r):,}" if r else "--",
+        "support":    f"Rp {math.floor(s_val):,}" if s_val else "--",
+        "resistance": f"Rp {math.floor(r_val):,}" if r_val else "--",
     }
 
 def _generate_narrative_comment(
@@ -490,7 +495,11 @@ async def get_ticker_data(ticker: str, period: str = "1y"):
 @app.get("/api/movers/{mover_type}")
 async def get_market_movers(mover_type: str):
     """Return ranked market movers from the background cache (lightweight, instant)."""
-    valid_types = {"gainers", "losers", "active", "dividend"}
+    valid_types = {
+        "gainers", "losers", "active", 
+        "strong_buy", "strong_sell", "take_profit", 
+        "accumulate", "hold", "wait_and_see"
+    }
     if mover_type not in valid_types:
         raise HTTPException(status_code=400, detail=f"Unknown type. Valid: {valid_types}")
 
@@ -529,11 +538,11 @@ def _parse_ticker_summaries(raw_data: Any, tickers: List[str]) -> List[Dict]:
     for t in tickers:
         try:
             df = raw_data if single_ticker else raw_data.get(t)
-            if df is None or df.empty or len(df) < 2:
+            if df is None or df.empty or len(df) < 15:
                 continue
 
             df = df.dropna(subset=['Close', 'Volume'])
-            if len(df) < 2:
+            if len(df) < 15:
                 continue
 
             close_last = float(df['Close'].iloc[-1])
@@ -547,11 +556,22 @@ def _parse_ticker_summaries(raw_data: Any, tickers: List[str]) -> List[Dict]:
             if math.isnan(pct_change) or math.isinf(pct_change):
                 continue
 
+            # Calculate technical report
+            indicators = compute_indicators(df)
+            rec = "WAIT AND SEE"
+            if indicators:
+                try:
+                    report = generate_report(t, df, indicators)
+                    rec = report.get("recommendation", "WAIT AND SEE")
+                except Exception as e:
+                    print(f"[Scanner] Failed to generate report for {t}: {e}")
+
             summary.append({
-                "ticker":    t,
-                "price":     round(close_last, 2),
-                "pctChange": round(pct_change, 4),
-                "volume":    volume,
+                "ticker":          t,
+                "price":           round(close_last, 2),
+                "pctChange":       round(pct_change, 4),
+                "volume":          volume,
+                "recommendation":  rec,
             })
         except Exception as e:
             print(f"[Scanner] Skipped summary parse for {t}: {e}")
@@ -572,10 +592,16 @@ def _cache_sorted_movers(summary: List[Dict]) -> None:
         summary, key=lambda x: x["volume"], reverse=True
     )[:20]
 
-    div_pool = [s for s in summary if s["ticker"] in HIGH_DIVIDEND_POOL]
-    movers_cache["dividend"] = sorted(
-        div_pool, key=lambda x: x["volume"], reverse=True
-    )[:20]
+    # Dynamic recommendation pools (sorted by active volume descending)
+    def sort_by_vol(lst):
+        return sorted(lst, key=lambda x: x["volume"], reverse=True)
+
+    movers_cache["strong_buy"] = sort_by_vol([s for s in summary if s.get("recommendation") == "STRONG BUY"])
+    movers_cache["strong_sell"] = sort_by_vol([s for s in summary if s.get("recommendation") == "STRONG SELL"])
+    movers_cache["take_profit"] = sort_by_vol([s for s in summary if s.get("recommendation") == "TAKE PROFIT"])
+    movers_cache["accumulate"] = sort_by_vol([s for s in summary if s.get("recommendation") == "ACCUMULATE"])
+    movers_cache["hold"] = sort_by_vol([s for s in summary if s.get("recommendation") == "HOLD"])
+    movers_cache["wait_and_see"] = sort_by_vol([s for s in summary if s.get("recommendation") == "WAIT AND SEE"])
 
 async def _background_scan():
     """Continuously rank all IDX stocks and cache sorted lightweight movers."""
@@ -585,12 +611,12 @@ async def _background_scan():
             tickers = idx_tickers_pool
             loop    = asyncio.get_event_loop()
 
-            # Batch-download 5 days in one call
+            # Batch-download 1 year of history for Technical Indicator scans
             raw = await loop.run_in_executor(
                 executor,
                 lambda: yf.download(
                     tickers,
-                    period="5d",
+                    period="1y",
                     group_by="ticker",
                     progress=False,
                     auto_adjust=True,
@@ -610,8 +636,7 @@ async def _background_scan():
             print(
                 f"[Scanner] Done — gainers={len(movers_cache['gainers'])}, "
                 f"losers={len(movers_cache['losers'])}, "
-                f"active={len(movers_cache['active'])}, "
-                f"dividend={len(movers_cache['dividend'])}"
+                f"active={len(movers_cache['active'])}"
             )
 
         except Exception as e:
